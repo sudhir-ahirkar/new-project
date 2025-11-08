@@ -30,4 +30,5 @@ buildNumber.properties
 *.ear
 *.zip
 *.tar.gz
-*.rar
+*.rar.DS_Store
+.DS_Store
