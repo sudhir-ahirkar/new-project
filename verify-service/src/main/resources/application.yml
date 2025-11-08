@@ -1,0 +1,53 @@
+server:
+  port: 8083
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    consumer:
+      group-id: verify-service-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: '*'
+
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+  datasource:
+    url: jdbc:postgresql://localhost:5432/toll_db
+    username: toll
+    password: tollpass
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update   # or validate / none
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true
+
+verify:
+  topic: toll.tag.event
+payment:
+  topics:
+    request: toll.charge.request
+    response: toll.charge.response
+
+
+vendor:
+  service-url: http://localhost:8084/vendor/tag   # 👈 new vendor mock service
+cache:
+  ttl-minutes: 5
+refresh:
+  interval-ms: 300000   # 5 minutes
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      vendorService:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        minimum-number-of-calls: 5

@@ -1,0 +1,28 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: payment-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: payment-service-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        spring.json.trusted.packages: "*"
+        # Tell consumer what class to map to when no type headers
+        spring.json.value.default.type: "com.toll.common.model.TagChargeRequest"
+    producer:
+      properties:
+        # Do not add type headers so different services can deserialize safely
+        spring.json.add.type.headers: false
+    listener:
+      ack-mode: RECORD
+payment:
+  topics:
+    request: toll.charge.request
+    response: toll.charge.response
+  # a small random failure rate to simulate gateway instability
+  simulate-failure-percent: 10

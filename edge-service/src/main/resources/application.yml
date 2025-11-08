@@ -1,0 +1,12 @@
+server:
+  port: 8081
+spring:
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+edge:
+  ingest-url: http://localhost:8082/ingest/tags
+  batch-size: 10
+  flush-interval-ms: 5000
