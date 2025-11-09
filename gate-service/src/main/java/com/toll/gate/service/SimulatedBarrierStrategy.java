@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
  * - Then calls callback to publish CLOSE automatically.
  */
 @Slf4j
-@Service   // ✅ Now Spring picks it up as a bean
+@Service
 public class SimulatedBarrierStrategy implements BarrierStrategy {
 
     private static final long OPEN_DURATION_MS = 3000;
@@ -26,12 +26,12 @@ public class SimulatedBarrierStrategy implements BarrierStrategy {
             try { Thread.sleep(OPEN_DURATION_MS); }
             catch (InterruptedException ignored) {}
 
-            log.info("✅ Barrier fully OPENED (simulated) eventId={}", cmd.getEventId());
+            log.info("Barrier fully OPENED (simulated) eventId={}", cmd.getEventId());
 
-            onCloseCallback.run(); // 🔥 triggers auto close
+            onCloseCallback.run(); // triggers auto close
 
         } else {
-            log.warn("🚫 Gate DENIED for tag={} eventId={} reason={}",
+            log.warn("Gate DENIED for tag={} eventId={} reason={}",
                     cmd.getTagId(), cmd.getEventId(), cmd.getReason());
         }
     }

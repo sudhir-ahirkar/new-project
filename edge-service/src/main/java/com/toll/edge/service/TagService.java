@@ -23,12 +23,12 @@ public class TagService {
 
     public void simulateRead(TagReadRequest req) {
 
-        // 🛑 Blacklist check FIRST
+        // Blacklist check FIRST
         String blacklistKey = "BLACKLIST:" + req.getTagId();
         BlacklistEntry blocked = blacklistRedisTemplate.opsForValue().get(blacklistKey);
 
         if (blocked != null) {
-            log.warn("⛔ BLOCKED — Tag {} denied. Reason={}", req.getTagId(), blocked.getReason());
+            log.warn("BLOCKED — Tag {} denied. Reason={}", req.getTagId(), blocked.getReason());
             throw new IllegalStateException("Tag is blacklisted: " + blocked.getReason());
         }
 
@@ -54,28 +54,6 @@ public class TagService {
         log.info("Simulated read and cached {} ; queued for ingest", tag.getTagId());
     }
 
-        /*public void simulateRead(TagReadRequest req) {
-        //double toll = rateService.getToll(req.getPlazaId(), req.getLaneId(), req.getVehicleType());
-        CurrentTrip trip = CurrentTrip.builder()
-                .plazaId(req.getPlazaId())
-                .laneId(req.getLaneId())
-                .timestamp(Instant.now().toString())
-                //.tollAmount(toll)
-                .status("PENDING")
-                .build();
-        TagInfo tag = TagInfo.builder()
-                .tagId(req.getTagId())
-                .vehicleNumber(req.getVehicleNumber())
-                .vehicleType(req.getVehicleType())
-                .balance(500.0) // demo starting balance
-                .currentTrip(trip)
-                .build();
-        String key = "TAG:" + tag.getTagId();
-        redisTemplate.opsForValue().set(key, tag); // cache in redis
-        batchQueue.add(tag);
-        log.info("Simulated read and cached {} ; queued for ingest", tag.getTagId());
-    }
-*/
     public List<TagInfo> drainBatch(int maxBatch) {
         List<TagInfo> out = new ArrayList<>();
         for (int i = 0; i < maxBatch; i++) {

@@ -8,23 +8,6 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.*;
 
-/*@Configuration
-public class RedisConfig {
-    @Bean
-    public RedisTemplate<String, TagInfo> tagRedisTemplate(RedisConnectionFactory cf) {
-        RedisTemplate<String, TagInfo> t = new RedisTemplate<>();
-        t.setConnectionFactory(cf);
-        ObjectMapper om = new ObjectMapper();
-        om.registerModule(new JavaTimeModule());
-        Jackson2JsonRedisSerializer<TagInfo> ser = new Jackson2JsonRedisSerializer<>(TagInfo.class);
-        ser.setObjectMapper(om);
-        t.setKeySerializer(new StringRedisSerializer());
-        t.setValueSerializer(ser);
-        t.afterPropertiesSet();
-        return t;
-    }
-}*/
-
 @Configuration
 public class RedisConfig {
 
