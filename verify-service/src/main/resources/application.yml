@@ -27,6 +27,7 @@ spring:
     show-sql: true
 
 verify:
+  open-gate-on-request: false   # set to false to open only after payment success
   topic: toll.tag.event
 payment:
   topics:

@@ -25,9 +25,6 @@ public class PaymentProcessor {
 
     private final KafkaTemplate<String, TagChargeResponse> responseTemplate;
 
-    @Value("${payment.topics.request}")
-    private String requestTopic;
-
     @Value("${payment.topics.response}")
     private String responseTopic;
 
@@ -44,7 +41,6 @@ public class PaymentProcessor {
         log.info("💳 Received charge request eventId={} tagId={} amount={}",
                 req.getEventId(), req.getTagId(), req.getAmount());
 
-        // Simulate gateway processing (95% success if failurePercent=5 etc.)
         boolean fail = rnd.nextInt(100) < failurePercent;
 
         TagChargeResponse resp = TagChargeResponse.builder()

@@ -10,6 +10,8 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -33,7 +35,219 @@ public class VerifyService {
     @Value("${cache.ttl-minutes:5}")
     private long cacheTtlMinutes;
 
+    @Value("${verify.open-gate-on-request:true}")
+    private boolean openGateOnRequest;
+
     @Transactional
+    public void process(TagInfo incoming) {
+
+        String eventId = incoming.getTagId() + "-" + incoming.getCurrentTrip().getTimestamp();
+
+        if (txRepo.findByEventId(eventId).isPresent()) {
+            log.info("Skipping duplicate event {}", eventId);
+            return;
+        }
+
+        String redisKey = "TAG:" + incoming.getTagId();
+        TagInfo stored = tagRedisTemplate.opsForValue().get(redisKey);
+
+        if (stored == null) {
+            stored = vendorClient.fetchTag(incoming.getTagId());
+            if (stored == null) return;
+            tagRedisTemplate.opsForValue().set(redisKey, stored, cacheTtlMinutes, TimeUnit.MINUTES);
+        }
+
+        double toll = incoming.getCurrentTrip().getTollAmount();
+        double prevBalance = stored.getBalance();
+        boolean sufficientFunds = prevBalance >= toll;
+        String status = sufficientFunds ? "PENDING_PAYMENT" : "INSUFFICIENT_FUNDS";
+
+        // ✅ Save the transaction FIRST
+        TollTransaction tx = TollTransaction.builder()
+                .eventId(eventId)
+                .tagId(stored.getTagId())
+                .vehicleNumber(stored.getVehicleNumber())
+                .vehicleType(stored.getVehicleType())
+                .plazaId(incoming.getCurrentTrip().getPlazaId())
+                .laneId(incoming.getCurrentTrip().getLaneId())
+                .timestamp(Instant.now())
+                .tollAmount(toll)
+                .previousBalance(prevBalance)
+                .newBalance(prevBalance)
+                .status(status)
+                .createdAt(Instant.now())
+                .build();
+
+        txRepo.save(tx);
+        log.info("💾 Transaction persisted BEFORE publishing: {}", tx);
+
+        // ✅ Publish Kafka *after* commit finishes
+        TagInfo finalStored = stored;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+
+                if (sufficientFunds) {
+
+                    // ✅ Publish charge request (always)
+                    TagChargeRequest chargeReq = TagChargeRequest.builder()
+                            .eventId(eventId)
+                            .tagId(finalStored.getTagId())
+                            .amount(toll)
+                            .timestamp(Instant.now().toString())
+                            .build();
+
+                    chargeKafkaTemplate.send(paymentRequestTopic, finalStored.getTagId(), chargeReq);
+                    log.info("💰 Published TagChargeRequest AFTER COMMIT: {}", chargeReq);
+
+                    // ✅ FEATURE TOGGLE: Open gate now OR wait for payment-success callback
+                    if (openGateOnRequest) {
+
+                        OpenGateCommand gateCmd = OpenGateCommand.builder()
+                                .eventId(eventId)
+                                .tagId(finalStored.getTagId())
+                                .plazaId(incoming.getCurrentTrip().getPlazaId())
+                                .laneId(incoming.getCurrentTrip().getLaneId())
+                                .decision(Decision.OPEN)
+                                .reason("PAYMENT_REQUESTED")
+                                .timestamp(Instant.now())
+                                .build();
+
+                        gateKafkaTemplate.send(
+                                "toll.gate.command",
+                                gateCmd.getPlazaId() + ":" + gateCmd.getLaneId(),
+                                gateCmd
+                        );
+                        log.info("➡️ Gate OPEN published (PAYMENT_REQUESTED mode): {}", gateCmd);
+
+                    } else {
+                        log.info("⏳ Gate opening deferred — waiting for payment SUCCESS before opening.");
+                    }
+
+                } else {
+
+                    // ✅ Insufficient funds → straight DENY
+                    OpenGateCommand gateCmd = OpenGateCommand.builder()
+                            .eventId(eventId)
+                            .tagId(finalStored.getTagId())
+                            .plazaId(incoming.getCurrentTrip().getPlazaId())
+                            .laneId(incoming.getCurrentTrip().getLaneId())
+                            .decision(Decision.DENY)
+                            .reason("INSUFFICIENT_FUNDS")
+                            .timestamp(Instant.now())
+                            .build();
+
+                    gateKafkaTemplate.send(
+                            "toll.gate.command",
+                            gateCmd.getPlazaId() + ":" + gateCmd.getLaneId(),
+                            gateCmd
+                    );
+
+                    log.warn("🚫 Gate DENY published AFTER COMMIT: {}", gateCmd);
+                }
+            }
+        });
+    }
+/*    @Transactional
+    public void process(TagInfo incoming) {
+
+        String eventId = incoming.getTagId() + "-" + incoming.getCurrentTrip().getTimestamp();
+
+        if (txRepo.findByEventId(eventId).isPresent()) {
+            log.info("Skipping duplicate event {}", eventId);
+            return;
+        }
+
+        String redisKey = "TAG:" + incoming.getTagId();
+        TagInfo stored = tagRedisTemplate.opsForValue().get(redisKey);
+
+        if (stored == null) {
+            stored = vendorClient.fetchTag(incoming.getTagId());
+            if (stored == null) return;
+            tagRedisTemplate.opsForValue().set(redisKey, stored, cacheTtlMinutes, TimeUnit.MINUTES);
+        }
+
+        double toll = incoming.getCurrentTrip().getTollAmount();
+        double prevBalance = stored.getBalance();
+        String status;
+
+        boolean sufficientFunds = prevBalance >= toll;
+
+        if (sufficientFunds) {
+            status = "PENDING_PAYMENT";
+        } else {
+            status = "INSUFFICIENT_FUNDS";
+        }
+
+        // ✅ Save first — ensures ChargeResponse can find record
+        TollTransaction tx = TollTransaction.builder()
+                .eventId(eventId)
+                .tagId(stored.getTagId())
+                .vehicleNumber(stored.getVehicleNumber())
+                .vehicleType(stored.getVehicleType())
+                .plazaId(incoming.getCurrentTrip().getPlazaId())
+                .laneId(incoming.getCurrentTrip().getLaneId())
+                .timestamp(Instant.now())
+                .tollAmount(toll)
+                .previousBalance(prevBalance)
+                .newBalance(prevBalance) // will be updated on SUCCESS
+                .status(status)
+                .createdAt(Instant.now())
+                .build();
+
+        txRepo.save(tx);
+        log.info("💾 Transaction persisted BEFORE publishing: {}", tx);
+
+        // --------------------------------------------
+        // ✅ After saving → now publish events
+        // --------------------------------------------
+
+        if (sufficientFunds) {
+
+            // Send charge request to Payment Service
+            TagChargeRequest chargeReq = TagChargeRequest.builder()
+                    .eventId(eventId)
+                    .tagId(stored.getTagId())
+                    .amount(toll)
+                    .timestamp(Instant.now().toString())
+                    .build();
+
+            chargeKafkaTemplate.send(paymentRequestTopic, stored.getTagId(), chargeReq);
+            log.info("💰 Published TagChargeRequest: {}", chargeReq);
+
+            // Immediately open gate (optimistic authorization)
+            OpenGateCommand gateCmd = OpenGateCommand.builder()
+                    .eventId(eventId)
+                    .tagId(stored.getTagId())
+                    .plazaId(incoming.getCurrentTrip().getPlazaId())
+                    .laneId(incoming.getCurrentTrip().getLaneId())
+                    .decision(Decision.OPEN)
+                    .reason("PAYMENT_REQUESTED")
+                    .timestamp(Instant.now())
+                    .build();
+
+            gateKafkaTemplate.send("toll.gate.command", gateCmd.getPlazaId() + ":" + gateCmd.getLaneId(), gateCmd);
+            log.info("➡️ Gate OPEN published: {}", gateCmd);
+
+        } else {
+
+            // Insufficient funds → deny gate
+            OpenGateCommand gateCmd = OpenGateCommand.builder()
+                    .eventId(eventId)
+                    .tagId(stored.getTagId())
+                    .plazaId(incoming.getCurrentTrip().getPlazaId())
+                    .laneId(incoming.getCurrentTrip().getLaneId())
+                    .decision(Decision.DENY)
+                    .reason("INSUFFICIENT_FUNDS")
+                    .timestamp(Instant.now())
+                    .build();
+
+            gateKafkaTemplate.send("toll.gate.command", gateCmd.getPlazaId() + ":" + gateCmd.getLaneId(), gateCmd);
+            log.warn("🚫 Gate DENY published: {}", gateCmd);
+        }
+    }*/
+
+/*    @Transactional
     public void process(TagInfo incoming) {
 
         String eventId = incoming.getTagId() + "-" + incoming.getCurrentTrip().getTimestamp();
@@ -124,7 +338,7 @@ public class VerifyService {
 
         txRepo.save(tx);
         log.info("Transaction saved: {}", tx);
-    }
+    }*/
 
     /**
      * Publishes a gate command event to Kafka.
