@@ -20,5 +20,5 @@ public class TagChargeRequest implements Serializable {
     private Double amount;       // toll to charge
     private String plazaId;
     private String laneId;
-    private String timestampIso; // original event timestamp (optional)
+    private String timestamp; // original event timestamp (optional)
 }

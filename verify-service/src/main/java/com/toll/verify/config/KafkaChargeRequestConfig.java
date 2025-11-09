@@ -1,6 +1,44 @@
+
 package com.toll.verify.config;
 
-import com.toll.common.model.OpenGateCommand;
+import com.toll.common.model.TagChargeRequest;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.core.DefaultKafkaProducerFactory;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.support.serializer.JsonSerializer;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Configuration
+public class KafkaChargeRequestConfig {
+
+    @Value("${spring.kafka.bootstrap-servers}")
+    private String bootstrap;
+
+    @Bean
+    public ProducerFactory<String, TagChargeRequest> chargeRequestProducerFactory() {
+        Map<String, Object> configProps = new HashMap<>();
+        configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
+        configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        configProps.put(JsonSerializer.ADD_TYPE_INFO_HEADERS, false);
+        return new DefaultKafkaProducerFactory<>(configProps);
+    }
+
+    @Bean(name = "chargeRequestKafkaTemplate")
+    public KafkaTemplate<String, TagChargeRequest> chargeRequestKafkaTemplate() {
+        return new KafkaTemplate<>(chargeRequestProducerFactory());
+    }
+}
+
+
+/*import com.toll.common.model.OpenGateCommand;
 import com.toll.common.model.TagChargeRequest;
 import com.toll.common.model.TagChargeResponse;
 import lombok.RequiredArgsConstructor;
@@ -27,9 +65,11 @@ public class KafkaChargeConfig {
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrap;
 
-    /* ---------------------------------------------------
+
+*//* ---------------------------------------------------
      *  PRODUCER: TagChargeRequest  →  payment-service
-     * --------------------------------------------------- */
+     * --------------------------------------------------- *//*
+
     @Bean
     public ProducerFactory<String, TagChargeRequest> chargeRequestProducerFactory() {
         return new DefaultKafkaProducerFactory<>(
@@ -46,9 +86,11 @@ public class KafkaChargeConfig {
         return new KafkaTemplate<>(chargeRequestProducerFactory());
     }
 
-    /* ---------------------------------------------------
+
+*//* ---------------------------------------------------
      *  CONSUMER: TagChargeResponse  ←  from payment-service
-     * --------------------------------------------------- */
+     * --------------------------------------------------- *//*
+
     @Bean
     public ConsumerFactory<String, TagChargeResponse> chargeResponseConsumerFactory() {
 
@@ -77,4 +119,5 @@ public class KafkaChargeConfig {
         factory.setCommonErrorHandler(new DefaultErrorHandler()); // keeps consumer running on error
         return factory;
     }
-}
+}*/
+

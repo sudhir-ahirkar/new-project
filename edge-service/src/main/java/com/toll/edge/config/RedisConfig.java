@@ -2,6 +2,7 @@ package com.toll.edge.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.toll.common.model.BlacklistEntry;
 import com.toll.common.model.TagInfo;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,6 +25,26 @@ public class RedisConfig {
         // ✅ New constructor: directly pass ObjectMapper
         Jackson2JsonRedisSerializer<TagInfo> valueSerializer =
                 new Jackson2JsonRedisSerializer<>(objectMapper, TagInfo.class);
+
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(valueSerializer);
+        template.setHashKeySerializer(new StringRedisSerializer());
+        template.setHashValueSerializer(valueSerializer);
+
+        template.afterPropertiesSet();
+        return template;
+    }
+
+    @Bean
+    public RedisTemplate<String, BlacklistEntry> blacklistRedisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, BlacklistEntry> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+
+        Jackson2JsonRedisSerializer<BlacklistEntry> valueSerializer =
+                new Jackson2JsonRedisSerializer<>(objectMapper, BlacklistEntry.class);
 
         template.setKeySerializer(new StringRedisSerializer());
         template.setValueSerializer(valueSerializer);

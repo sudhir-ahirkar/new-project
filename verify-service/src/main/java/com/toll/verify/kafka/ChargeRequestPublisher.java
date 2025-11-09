@@ -3,6 +3,7 @@ package com.toll.verify.kafka;
 import com.toll.common.model.TagChargeRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
@@ -12,14 +13,15 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ChargeRequestPublisher {
 
-    private final KafkaTemplate<String, TagChargeRequest> template;
-
     @Value("${payment.topics.request}")
     private String topic;
 
+    @Qualifier("chargeRequestKafkaTemplate")
+    private final KafkaTemplate<String, TagChargeRequest> chargeRequestKafkaTemplate;
+
     public void publish(TagChargeRequest req) {
-        template.send(topic, req.getTagId(), req);
-        log.info("➡️  Published charge request eventId={} tagId={} amount={}",
+        chargeRequestKafkaTemplate.send(topic, req.getEventId(), req);
+        log.info("💳 Published charge request eventId={} tagId={} amount={}",
                 req.getEventId(), req.getTagId(), req.getAmount());
     }
 }
