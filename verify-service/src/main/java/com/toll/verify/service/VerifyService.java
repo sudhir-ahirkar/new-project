@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit;
 public class VerifyService {
 
     private final TollTransactionRepository txRepo;
-    private final RedisTemplate<String, TagInfo> redisTemplate;
+    private final RedisTemplate<String, TagInfo> tagRedisTemplate;
+    private final RedisTemplate<String, BlacklistEntry> blacklistRedisTemplate;
     private final TagVendorClient vendorClient;
     private final KafkaTemplate<String, OpenGateCommand> gateKafkaTemplate;
     private final KafkaTemplate<String, TagChargeRequest> chargeKafkaTemplate;
@@ -43,12 +44,12 @@ public class VerifyService {
         }
 
         String redisKey = "TAG:" + incoming.getTagId();
-        TagInfo stored = redisTemplate.opsForValue().get(redisKey);
+        TagInfo stored = tagRedisTemplate.opsForValue().get(redisKey);
 
         if (stored == null) {
             stored = vendorClient.fetchTag(incoming.getTagId());
             if (stored == null) return;
-            redisTemplate.opsForValue().set(redisKey, stored, cacheTtlMinutes, TimeUnit.MINUTES);
+            tagRedisTemplate.opsForValue().set(redisKey, stored, cacheTtlMinutes, TimeUnit.MINUTES);
         }
 
         double toll = incoming.getCurrentTrip().getTollAmount();
@@ -150,7 +151,7 @@ public class VerifyService {
 
         // Load TagInfo from Redis
         String redisKey = "TAG:" + tx.getTagId();
-        TagInfo stored = redisTemplate.opsForValue().get(redisKey);
+        TagInfo stored = tagRedisTemplate.opsForValue().get(redisKey);
 
         if (stored == null) {
             log.error("❗ Redis missing tag info for {}, cannot finalize.", tx.getTagId());
@@ -183,7 +184,7 @@ public class VerifyService {
 
             // revert previous deduction
             stored.setBalance(tx.getPreviousBalance());
-            redisTemplate.opsForValue().set(redisKey, stored, cacheTtlMinutes, TimeUnit.MINUTES);
+            tagRedisTemplate.opsForValue().set(redisKey, stored, cacheTtlMinutes, TimeUnit.MINUTES);
 
             tx.setStatus("FAILED");
 
@@ -194,7 +195,7 @@ public class VerifyService {
                     .timestamp(Instant.now())
                     .build();
 
-            redisTemplate.opsForValue().set(
+            blacklistRedisTemplate.opsForValue().set(
                     "BLACKLIST:" + tx.getTagId(),
                     entry,
                     24, TimeUnit.HOURS

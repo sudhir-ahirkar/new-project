@@ -1,6 +1,7 @@
 package com.toll.verify.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.toll.common.model.BlacklistEntry;
 import com.toll.common.model.TagInfo;
 import org.springframework.context.annotation.*;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -43,6 +44,25 @@ public class RedisConfig {
         template.setValueSerializer(valueSerializer);
         template.setHashKeySerializer(new StringRedisSerializer());
         template.setHashValueSerializer(valueSerializer);
+
+        template.afterPropertiesSet();
+        return template;
+    }
+    @Bean
+    public RedisTemplate<String, BlacklistEntry> blacklistRedisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, BlacklistEntry> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+
+        Jackson2JsonRedisSerializer<BlacklistEntry> serializer =
+                new Jackson2JsonRedisSerializer<>(mapper, BlacklistEntry.class);
+
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(serializer);
+        template.setHashKeySerializer(new StringRedisSerializer());
+        template.setHashValueSerializer(serializer);
 
         template.afterPropertiesSet();
         return template;
