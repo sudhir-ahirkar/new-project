@@ -3,14 +3,17 @@ package com.toll.edge.service;
 import com.toll.common.model.BlacklistEntry;
 import com.toll.common.model.CurrentTrip;
 import com.toll.common.model.TagInfo;
+import com.toll.edge.exception.ManualInterventionRequiredException;
 import com.toll.edge.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -18,8 +21,10 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class TagService {
     private final RedisTemplate<String, TagInfo> tagRedisTemplate;
     private final RedisTemplate<String, BlacklistEntry> blacklistRedisTemplate;
-    private final RateService rateService;
     private final Queue<TagInfo> batchQueue = new ConcurrentLinkedQueue<>();
+    // 👇 inject TTL (minutes) from application.yml
+    @Value("${cache.ttl-minutes:5}")
+    private long cacheTtlMinutes;
 
     public void simulateRead(TagReadRequest req) {
 
@@ -29,8 +34,19 @@ public class TagService {
 
         if (blocked != null) {
             log.warn("BLOCKED — Tag {} denied. Reason={}", req.getTagId(), blocked.getReason());
-            throw new IllegalStateException("Tag is blacklisted: " + blocked.getReason());
+
+            throw new ManualInterventionRequiredException(
+                    req.getTagId(),
+                    blocked.getReason(),
+                    "Please direct vehicle to manual lane for fee collection."
+            );
         }
+
+        // ✅ TRY TO FETCH EXISTING TAG FROM REDIS
+        String redisKey = "TAG:" + req.getTagId();
+        TagInfo existing = tagRedisTemplate.opsForValue().get(redisKey);
+
+        double balance = existing != null ? existing.getBalance() : 500.0; // Keep existing balance
 
         CurrentTrip trip = CurrentTrip.builder()
                 .plazaId(req.getPlazaId())
@@ -43,15 +59,16 @@ public class TagService {
                 .tagId(req.getTagId())
                 .vehicleNumber(req.getVehicleNumber())
                 .vehicleType(req.getVehicleType())
-                .balance(500.0)
+                .balance(balance) // Correct balance retained
                 .currentTrip(trip)
                 .build();
 
-        String key = "TAG:" + tag.getTagId();
-        tagRedisTemplate.opsForValue().set(key, tag);
+        tagRedisTemplate.opsForValue().set(redisKey, tag, cacheTtlMinutes, TimeUnit.MINUTES);
 
         batchQueue.add(tag);
-        log.info("Simulated read and cached {} ; queued for ingest", tag.getTagId());
+
+        log.info("📡 Simulated read for {} (balance={}, status={}) → sent to ingest",
+                tag.getTagId(), balance, trip.getStatus());
     }
 
     public List<TagInfo> drainBatch(int maxBatch) {

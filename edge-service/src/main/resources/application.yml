@@ -2,6 +2,7 @@ server:
   port: 8081
 spring:
   redis:
+    database: 0
     host: ${REDIS_HOST:localhost}
     port: ${REDIS_PORT:6379}
   kafka:
@@ -10,3 +11,4 @@ edge:
   ingest-url: http://localhost:8082/ingest/tags
   batch-size: 10
   flush-interval-ms: 5000
+

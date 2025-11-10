@@ -27,5 +27,7 @@ public class TollTransaction {
     private Double newBalance;
     private String status; // SUCCESS, INSUFFICIENT_FUNDS
     private Instant createdAt;
+    @Column(name = "manual_penalty_amount")
+    private Double manualPenaltyAmount;
 }
 

@@ -25,4 +25,4 @@ payment:
     request: toll.charge.request
     response: toll.charge.response
   # a small random failure rate to simulate gateway instability
-  simulate-failure-percent: 10
+  simulate-failure-percent: 100

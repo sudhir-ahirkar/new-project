@@ -43,6 +43,7 @@ public class VerifyService {
 
         String eventId = incoming.getTagId() + "-" + incoming.getCurrentTrip().getTimestamp();
 
+        // Idempotency check
         if (txRepo.findByEventId(eventId).isPresent()) {
             log.info("Skipping duplicate event {}", eventId);
             return;
@@ -59,10 +60,50 @@ public class VerifyService {
 
         double toll = incoming.getCurrentTrip().getTollAmount();
         double prevBalance = stored.getBalance();
+
+        // ✅ NEW: Manual override flow (Blacklisted, Manual Required, etc.)
+        if ("MANUAL_REQUIRED".equalsIgnoreCase(incoming.getCurrentTrip().getStatus())) {
+            log.warn("🚫 Tag {} flagged MANUAL_REQUIRED — sending gate DENY and recording transaction",
+                    incoming.getTagId());
+
+            TollTransaction tx = TollTransaction.builder()
+                    .eventId(eventId)
+                    .tagId(stored.getTagId())
+                    .vehicleNumber(stored.getVehicleNumber())
+                    .vehicleType(stored.getVehicleType())
+                    .plazaId(incoming.getCurrentTrip().getPlazaId())
+                    .laneId(incoming.getCurrentTrip().getLaneId())
+                    .timestamp(Instant.now())
+                    .tollAmount(toll)
+                    .previousBalance(prevBalance)
+                    .newBalance(prevBalance)
+                    .status("MANUAL_REQUIRED")
+                    .createdAt(Instant.now())
+                    .build();
+
+            txRepo.save(tx);
+
+            // Send DENY to gate
+            OpenGateCommand gateCmd = OpenGateCommand.builder()
+                    .eventId(eventId)
+                    .tagId(stored.getTagId())
+                    .plazaId(incoming.getCurrentTrip().getPlazaId())
+                    .laneId(incoming.getCurrentTrip().getLaneId())
+                    .decision(Decision.DENY)
+                    .reason("MANUAL_REQUIRED")
+                    .timestamp(Instant.now())
+                    .build();
+
+            publishGateCommand(gateCmd);
+
+            log.warn("Gate DENY published due to MANUAL_REQUIRED: {}", gateCmd);
+            return; // ✅ stop further automatic processing
+        }
+
+        // ✅ Normal flow begins here
         boolean sufficientFunds = prevBalance >= toll;
         String status = sufficientFunds ? "PENDING_PAYMENT" : "INSUFFICIENT_FUNDS";
 
-        // Save the transaction FIRST
         TollTransaction tx = TollTransaction.builder()
                 .eventId(eventId)
                 .tagId(stored.getTagId())
@@ -73,7 +114,7 @@ public class VerifyService {
                 .timestamp(Instant.now())
                 .tollAmount(toll)
                 .previousBalance(prevBalance)
-                .newBalance(prevBalance)
+                .newBalance(prevBalance) // will update on SUCCESS later
                 .status(status)
                 .createdAt(Instant.now())
                 .build();
@@ -81,7 +122,6 @@ public class VerifyService {
         txRepo.save(tx);
         log.info("Transaction persisted BEFORE publishing: {}", tx);
 
-        // Publish Kafka *after* commit finishes
         TagInfo finalStored = stored;
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -89,7 +129,7 @@ public class VerifyService {
 
                 if (sufficientFunds) {
 
-                    // Publish charge request (always)
+                    // Publish charge request
                     TagChargeRequest chargeReq = TagChargeRequest.builder()
                             .eventId(eventId)
                             .tagId(finalStored.getTagId())
@@ -100,9 +140,8 @@ public class VerifyService {
                     chargeKafkaTemplate.send(paymentRequestTopic, finalStored.getTagId(), chargeReq);
                     log.info("Published TagChargeRequest AFTER COMMIT: {}", chargeReq);
 
-                    // FEATURE TOGGLE: Open gate now OR wait for payment-success callback
+                    // Feature toggle: open now or wait for payment confirmation
                     if (openGateOnRequest) {
-
                         OpenGateCommand gateCmd = OpenGateCommand.builder()
                                 .eventId(eventId)
                                 .tagId(finalStored.getTagId())
@@ -113,20 +152,12 @@ public class VerifyService {
                                 .timestamp(Instant.now())
                                 .build();
 
-                        gateKafkaTemplate.send(
-                                "toll.gate.command",
-                                gateCmd.getPlazaId() + ":" + gateCmd.getLaneId(),
-                                gateCmd
-                        );
+                        publishGateCommand(gateCmd);
                         log.info("Gate OPEN published (PAYMENT_REQUESTED mode): {}", gateCmd);
-
-                    } else {
-                        log.info("Gate opening deferred — waiting for payment SUCCESS before opening.");
                     }
 
                 } else {
-
-                    // Insufficient funds → straight DENY
+                    // Insufficient funds → deny immediately
                     OpenGateCommand gateCmd = OpenGateCommand.builder()
                             .eventId(eventId)
                             .tagId(finalStored.getTagId())
@@ -137,17 +168,13 @@ public class VerifyService {
                             .timestamp(Instant.now())
                             .build();
 
-                    gateKafkaTemplate.send(
-                            "toll.gate.command",
-                            gateCmd.getPlazaId() + ":" + gateCmd.getLaneId(),
-                            gateCmd
-                    );
-
+                    publishGateCommand(gateCmd);
                     log.warn("Gate DENY published AFTER COMMIT: {}", gateCmd);
                 }
             }
         });
     }
+
 
     /**
      * Publishes a gate command event to Kafka.
@@ -166,30 +193,40 @@ public class VerifyService {
 
         Optional<TollTransaction> optTx = txRepo.findByEventId(resp.getEventId());
         if (optTx.isEmpty()) {
-            log.warn("No matching transaction found for eventId={}, ignoring payment response", resp.getEventId());
+            log.warn("No matching transaction found for eventId={}, ignoring", resp.getEventId());
             return;
         }
 
         TollTransaction tx = optTx.get();
 
-        // Load TagInfo from Redis
+        // Load Redis Tag Data
         String redisKey = "TAG:" + tx.getTagId();
         TagInfo stored = tagRedisTemplate.opsForValue().get(redisKey);
 
         if (stored == null) {
-            log.error("Redis missing tag info for {}, cannot finalize.", tx.getTagId());
+            log.error("Redis missing TagInfo for {}", tx.getTagId());
             return;
         }
 
-        // SUCCESS CASE
+        // ✅ SUCCESS CASE → Deduct Balance Here
         if (resp.getStatus() == ChargeStatus.SUCCESS) {
 
-            tx.setStatus("SUCCESS");
-            // Balance was already deducted in process() — so nothing to revert
+            double prevBalance = tx.getPreviousBalance();
+            double toll = tx.getTollAmount();
+            double newBalance = prevBalance - toll;
 
-            // OPEN gate
+            // ✅ Update Redis
+            stored.setBalance(newBalance);
+            tagRedisTemplate.opsForValue().set(redisKey, stored, cacheTtlMinutes, TimeUnit.MINUTES);
+
+            // ✅ Update DB
+            tx.setNewBalance(newBalance);
+            tx.setStatus("SUCCESS");
+            txRepo.save(tx);
+
+            // ✅ OPEN Gate
             OpenGateCommand gateCmd = OpenGateCommand.builder()
-                    .eventId(resp.getEventId())
+                    .eventId(tx.getEventId())
                     .tagId(tx.getTagId())
                     .plazaId(tx.getPlazaId())
                     .laneId(tx.getLaneId())
@@ -199,49 +236,71 @@ public class VerifyService {
                     .build();
 
             publishGateCommand(gateCmd);
-            log.info("Payment SUCCESS — Gate OPEN issued: {}", gateCmd);
 
-        }
-        // FAILED CASE — FULL BLACKLIST LOGIC
-        else {
-
-            // revert previous deduction
-            stored.setBalance(tx.getPreviousBalance());
-            tagRedisTemplate.opsForValue().set(redisKey, stored, cacheTtlMinutes, TimeUnit.MINUTES);
-
-            tx.setStatus("FAILED");
-
-            // 🆕 Blacklist for 24 hours
-            BlacklistEntry entry = BlacklistEntry.builder()
-                    .tagId(tx.getTagId())
-                    .reason("PAYMENT_FAILED")
-                    .timestamp(Instant.now())
-                    .build();
-
-            blacklistRedisTemplate.opsForValue().set(
-                    "BLACKLIST:" + tx.getTagId(),
-                    entry,
-                    24, TimeUnit.HOURS
-            );
-
-            log.warn("Tag {} blacklisted for 24h due to payment failure.", tx.getTagId());
-
-            // DENY gate command
-            OpenGateCommand gateCmd = OpenGateCommand.builder()
-                    .eventId(resp.getEventId())
-                    .tagId(tx.getTagId())
-                    .plazaId(tx.getPlazaId())
-                    .laneId(tx.getLaneId())
-                    .decision(Decision.DENY)
-                    .reason("PAYMENT_FAILED")
-                    .timestamp(Instant.now())
-                    .build();
-
-            publishGateCommand(gateCmd);
-            log.warn("Payment FAILED — Gate DENY issued: {}", gateCmd);
+            log.info("✅ Payment SUCCESS → Balance deducted {} → {} and gate opened.", prevBalance, newBalance);
+            return;
         }
 
+        // ❌ FAILED CASE → Revert & Blacklist
+        stored.setBalance(tx.getPreviousBalance());
+        tagRedisTemplate.opsForValue().set(redisKey, stored, cacheTtlMinutes, TimeUnit.MINUTES);
+
+        tx.setStatus("FAILED");
         txRepo.save(tx);
-        log.info("💾 Transaction updated eventId={} finalStatus={}", tx.getEventId(), tx.getStatus());
+
+        BlacklistEntry entry = BlacklistEntry.builder()
+                .tagId(tx.getTagId())
+                .reason("PAYMENT_FAILED")
+                .timestamp(Instant.now())
+                .build();
+
+        blacklistRedisTemplate.opsForValue().set("BLACKLIST:" + tx.getTagId(), entry, 24, TimeUnit.HOURS);
+
+        OpenGateCommand denyCmd = OpenGateCommand.builder()
+                .eventId(tx.getEventId())
+                .tagId(tx.getTagId())
+                .plazaId(tx.getPlazaId())
+                .laneId(tx.getLaneId())
+                .decision(Decision.DENY)
+                .reason("PAYMENT_FAILED")
+                .timestamp(Instant.now())
+                .build();
+
+        publishGateCommand(denyCmd);
+
+        log.warn("🚫 Payment FAILED → Blacklisted tag {} and gate denied.", tx.getTagId());
+    }
+
+    @Transactional
+    public void handleManualCollection(String eventId, double penaltyMultiplier) {
+
+        TollTransaction tx = txRepo.findByEventId(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("No transaction found for " + eventId));
+
+        double penaltyAmount = tx.getTollAmount() * penaltyMultiplier;
+
+        tx.setStatus("MANUAL_COLLECTED");
+        tx.setManualPenaltyAmount(penaltyAmount);
+        tx.setNewBalance(tx.getPreviousBalance()); // No balance deduction
+        txRepo.save(tx);
+
+        // ✅ Remove from blacklist after manual payment
+        blacklistRedisTemplate.delete("BLACKLIST:" + tx.getTagId());
+
+        log.info("💰 Manual toll processed for {} penalty={} newStatus={}", tx.getTagId(), penaltyAmount, tx.getStatus());
+
+        // ✅ Open gate manually now
+        OpenGateCommand cmd = OpenGateCommand.builder()
+                .eventId(tx.getEventId())
+                .tagId(tx.getTagId())
+                .plazaId(tx.getPlazaId())
+                .laneId(tx.getLaneId())
+                .decision(Decision.OPEN)
+                .reason("MANUAL_COLLECTED")
+                .timestamp(Instant.now())
+                .build();
+
+        publishGateCommand(cmd);
+        log.info("🚦 Gate OPEN (manual override): {}", cmd);
     }
 }

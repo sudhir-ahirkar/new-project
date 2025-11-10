@@ -18,4 +18,6 @@ public class CurrentTrip implements Serializable {
     private String timestamp;
     private Double tollAmount;
     private String status; // PENDING / SUCCESS / FAILED
+    private String blacklistedReason;
+
 }

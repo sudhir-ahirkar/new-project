@@ -1,0 +1,14 @@
+server:
+  port: 8088
+
+spring:
+  application:
+    name: vendor-service
+
+logging:
+  level:
+    root: INFO
+    com.example.vendor: DEBUG
+
+
+#curl -v http://localhost:8084/vendor/tag/T2011
