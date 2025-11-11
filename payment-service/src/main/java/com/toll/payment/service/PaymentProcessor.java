@@ -35,7 +35,7 @@ public class PaymentProcessor {
 
     @KafkaListener(
             topics = "${payment.topics.request}",
-            containerFactory = "requestKafkaListenerFactory"
+            containerFactory = "chargeRequestListenerFactory"
     )
     public void onRequest(TagChargeRequest req) {
         log.info("💳 Received charge request eventId={} tagId={} amount={}",
@@ -52,6 +52,6 @@ public class PaymentProcessor {
                 .build();
 
         responseTemplate.send(responseTopic, req.getTagId(), resp);
-        log.info("↩️  Published charge response for eventId={} status={}", resp.getEventId(), resp.getStatus());
+        log.info("Published charge response for eventId={} status={}", resp.getEventId(), resp.getStatus());
     }
 }

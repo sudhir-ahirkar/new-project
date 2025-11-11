@@ -25,7 +25,7 @@ public class PaymentKafkaConfig {
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrap;
 
-    // ✅ Consumer: TagChargeRequest
+    // Consumer: TagChargeRequest
     @Bean
     public ConsumerFactory<String, TagChargeRequest> chargeRequestConsumerFactory() {
         return new DefaultKafkaConsumerFactory<>(Map.of(
@@ -49,7 +49,7 @@ public class PaymentKafkaConfig {
         return listener;
     }
 
-    // ✅ Producer: TagChargeResponse
+    //Producer: TagChargeResponse
     @Bean
     public ProducerFactory<String, TagChargeResponse> chargeResponseProducerFactory() {
         return new DefaultKafkaProducerFactory<>(Map.of(

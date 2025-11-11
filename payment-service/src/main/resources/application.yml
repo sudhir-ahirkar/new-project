@@ -8,8 +8,8 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
       group-id: payment-service-group
-      auto-offset-reset: earliest
-      enable-auto-commit: false
+      auto-offset-reset: earliest         # Ensures replay works when restarting
+      enable-auto-commit: false           # Required so retries & DLT behave correctly
       properties:
         spring.json.trusted.packages: "*"
         # Tell consumer what class to map to when no type headers
@@ -19,7 +19,9 @@ spring:
         # Do not add type headers so different services can deserialize safely
         spring.json.add.type.headers: false
     listener:
-      ack-mode: RECORD
+      ack-mode: record                    # Process one message at a time (safer)
+      missing-topics-fatal: false         # Avoid startup failure if DLT topic not created yet
+
 payment:
   topics:
     request: toll.charge.request

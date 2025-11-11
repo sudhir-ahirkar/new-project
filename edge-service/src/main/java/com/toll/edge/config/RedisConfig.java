@@ -22,7 +22,6 @@ public class RedisConfig {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
 
-        // ✅ New constructor: directly pass ObjectMapper
         Jackson2JsonRedisSerializer<TagInfo> valueSerializer =
                 new Jackson2JsonRedisSerializer<>(objectMapper, TagInfo.class);
 

@@ -24,7 +24,7 @@ public class GateActuatorService {
         }
 
         strategy.handle(cmd, () -> {
-            // ⏳ AUTO CLOSE
+            // AUTO CLOSE
             OpenGateCommand closeCmd = OpenGateCommand.builder()
                     .eventId(cmd.getEventId())
                     .tagId(cmd.getTagId())
@@ -41,7 +41,7 @@ public class GateActuatorService {
                     closeCmd
             );
 
-            log.info("⬇️ AUTO CLOSE published eventId={}", cmd.getEventId());
+            log.info("AUTO CLOSE published eventId={}", cmd.getEventId());
         });
 
         store.apply(cmd);

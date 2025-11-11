@@ -25,7 +25,7 @@ public class KafkaConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "gate-service-group");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
 
-        // ✅ Use ErrorHandlingDeserializer delegating to JsonDeserializer
+        // Use ErrorHandlingDeserializer delegating to JsonDeserializer
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
                 org.springframework.kafka.support.serializer.ErrorHandlingDeserializer.class);
 

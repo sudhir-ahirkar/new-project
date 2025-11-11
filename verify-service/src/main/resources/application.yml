@@ -35,7 +35,7 @@ payment:
     response: toll.charge.response
 
 vendor:
-  service-url: http://localhost:8084/vendor/tag   # 👈 new vendor mock service
+  service-url: http://localhost:8084/vendor/tag
 cache:
   ttl-minutes: 5
 refresh:

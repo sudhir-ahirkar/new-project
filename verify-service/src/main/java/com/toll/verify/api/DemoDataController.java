@@ -24,18 +24,18 @@ public class DemoDataController {
 
         String key = "TAG:" + tag.getTagId();
         tagRedisTemplate.opsForValue().set(key, tag, ttlSeconds, TimeUnit.SECONDS);
-        return "✅ TAG stored: " + key + " (TTL " + ttlSeconds + " sec)";
+        return "TAG stored: " + key + " (TTL " + ttlSeconds + " sec)";
     }
 
     @PostMapping("/balance/{tagId}")
     public String setBalance(@PathVariable String tagId, @RequestParam double balance) {
         String key = "TAG:" + tagId;
         TagInfo t = tagRedisTemplate.opsForValue().get(key);
-        if (t == null) return "❌ Tag not found";
+        if (t == null) return "Tag not found";
 
         t.setBalance(balance);
         tagRedisTemplate.opsForValue().set(key, t);
-        return "✅ Balance updated → " + balance;
+        return "Balance updated → " + balance;
     }
 
     @PostMapping("/blacklist/{tagId}")
@@ -48,19 +48,19 @@ public class DemoDataController {
                 .build();
 
         blacklistRedisTemplate.opsForValue().set("BLACKLIST:" + tagId, entry, 24, TimeUnit.HOURS);
-        return "🚫 Tag BLACKLISTED: " + tagId + " (" + reason + ")";
+        return "Tag BLACKLISTED: " + tagId + " (" + reason + ")";
     }
 
     @DeleteMapping("/blacklist/{tagId}")
     public String unBlacklist(@PathVariable String tagId) {
         blacklistRedisTemplate.delete("BLACKLIST:" + tagId);
-        return "✅ Tag UN-BLACKLISTED: " + tagId;
+        return "Tag UN-BLACKLISTED: " + tagId;
     }
 
     @DeleteMapping("/reset")
     public String resetAll() {
         // for demo simplicity, flush all Redis
         tagRedisTemplate.getConnectionFactory().getConnection().flushAll();
-        return "🧹 Redis cleared — clean demo state";
+        return "Redis cleared — clean demo state";
     }
 }

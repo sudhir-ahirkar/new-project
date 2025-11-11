@@ -21,7 +21,7 @@ public class ManualCollectionController {
         double penaltyMultiplier = applyPenalty ? 2.0 : 1.0;
         verifyService.handleManualCollection(eventId, penaltyMultiplier);
 
-        return "✅ Manual toll processed for eventId=" + eventId +
+        return "Manual toll processed for eventId=" + eventId +
                 (applyPenalty ? " (Penalty Applied)" : "");
     }
 }

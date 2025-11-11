@@ -18,11 +18,11 @@ public class ChargeResponseListener {
     @Transactional
     @KafkaListener(
             topics = "${payment.topics.response}",
-            containerFactory = "responseKafkaListenerFactory"
+            containerFactory = "chargeResponseListenerFactory"
     )
     public void handlePaymentResponse(TagChargeResponse response) {
 
-        log.info("⬇️ Received TagChargeResponse eventId={} status={}",
+        log.info("Received TagChargeResponse eventId={} status={}",
                 response.getEventId(), response.getStatus());
 
         // Centralize all business logic

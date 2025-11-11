@@ -23,7 +23,7 @@ public class GateKafkaDLTConfig {
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrap;
 
-    // ✅ Producer for sending failed messages to DLT
+    // Producer for sending failed messages to DLT
     @Bean
     public ProducerFactory<Object, Object> gateDLTProducerFactory() {
         return new DefaultKafkaProducerFactory<>(
@@ -40,7 +40,7 @@ public class GateKafkaDLTConfig {
         return new KafkaTemplate<>(gateDLTProducerFactory());
     }
 
-    // ✅ Sends failed messages to {topic}.DLT
+    // Sends failed messages to {topic}.DLT
     @Bean
     public DeadLetterPublishingRecoverer gateRecoverer(KafkaTemplate<Object, Object> gateDLTKafkaTemplate) {
         return new DeadLetterPublishingRecoverer(
@@ -49,7 +49,7 @@ public class GateKafkaDLTConfig {
         );
     }
 
-    // ✅ Retry with exponential backoff before sending to DLT
+    // Retry with exponential backoff before sending to DLT
     @Bean
     public DefaultErrorHandler gateErrorHandler(DeadLetterPublishingRecoverer recoverer) {
         ExponentialBackOff backOff = new ExponentialBackOff(1000, 2.0);
@@ -57,7 +57,7 @@ public class GateKafkaDLTConfig {
         return new DefaultErrorHandler(recoverer, backOff);
     }
 
-    // ✅ Listener Factory (uses ConsumerFactory from KafkaConfig)
+    // Listener Factory (uses ConsumerFactory from KafkaConfig)
     @Bean(name = "gateCommandListenerFactory")
     public ConcurrentKafkaListenerContainerFactory<String, OpenGateCommand> gateCommandListenerFactory(
             DefaultErrorHandler errorHandler,

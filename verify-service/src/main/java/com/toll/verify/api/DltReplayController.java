@@ -17,7 +17,7 @@ public class DltReplayController {
                 "toll.charge.request.DLT",
                 "toll.charge.request"
         );
-        return "✅ Replayed " + count + " messages from toll.charge.request.DLT";
+        return "Replayed " + count + " messages from toll.charge.request.DLT";
     }
 
     @PostMapping("/replay/gate")
@@ -26,6 +26,6 @@ public class DltReplayController {
                 "toll.gate.command.DLT",
                 "toll.gate.command"
         );
-        return "✅ Replayed " + count + " messages from toll.gate.command.DLT";
+        return "Replayed " + count + " messages from toll.gate.command.DLT";
     }
 }

@@ -15,7 +15,7 @@ public class ManualOverrideController {
     @PostMapping("/allow/{eventId}")
     public String allowWithPenalty(@PathVariable String eventId) {
         //service.allowVehicleWithPenalty(eventId);
-        return "✅ Manual override applied. Gate opened.";
+        return "Manual override applied. Gate opened.";
     }
 }
 

@@ -45,7 +45,7 @@ public class IngestService {
             double toll = rateService.getToll(
                     tag.getCurrentTrip().getPlazaId(),
                     tag.getCurrentTrip().getLaneId(),
-                    tag.getVehicleType()   // ✅ use vehicleType for realistic toll rules
+                    tag.getVehicleType()   //use vehicleType for realistic toll rules
             );
             tag.getCurrentTrip().setTollAmount(toll);
 

@@ -22,7 +22,7 @@ public class GateCommandConsumer {
             containerFactory = "gateCommandListenerFactory"
     )
     public void onCommand(OpenGateCommand cmd) {
-        log.info("⬇️ Received OpenGateCommand: {}", cmd);
+        log.info("Received OpenGateCommand: {}", cmd);
         actuatorService.handle(cmd);
     }
 }

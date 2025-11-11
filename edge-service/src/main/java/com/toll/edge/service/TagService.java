@@ -22,7 +22,7 @@ public class TagService {
     private final RedisTemplate<String, TagInfo> tagRedisTemplate;
     private final RedisTemplate<String, BlacklistEntry> blacklistRedisTemplate;
     private final Queue<TagInfo> batchQueue = new ConcurrentLinkedQueue<>();
-    // 👇 inject TTL (minutes) from application.yml
+    // inject TTL (minutes) from application.yml
     @Value("${cache.ttl-minutes:5}")
     private long cacheTtlMinutes;
 
@@ -42,7 +42,7 @@ public class TagService {
             );
         }
 
-        // ✅ TRY TO FETCH EXISTING TAG FROM REDIS
+        // TRY TO FETCH EXISTING TAG FROM REDIS
         String redisKey = "TAG:" + req.getTagId();
         TagInfo existing = tagRedisTemplate.opsForValue().get(redisKey);
 

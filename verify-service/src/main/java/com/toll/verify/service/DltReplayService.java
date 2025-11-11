@@ -30,18 +30,18 @@ public class DltReplayService {
 
         int replayed = 0;
 
-        log.warn("♻️ Starting DLT replay from {} → {}", dltTopic, mainTopic);
+        log.warn("Starting DLT replay from {} → {}", dltTopic, mainTopic);
 
         var records = consumer.poll(Duration.ofSeconds(3));
 
         for (var record : records) {
-            log.warn("➡️ Replaying DLT message key={} value={}", record.key(), record.value());
+            log.warn("Replaying DLT message key={} value={}", record.key(), record.value());
             chargeRequestKafkaTemplate.send(mainTopic, record.key(), record.value());
             replayed++;
         }
 
         consumer.close();
-        log.warn("✅ DLT replay complete — {} messages resent from {} → {}", replayed, dltTopic, mainTopic);
+        log.warn("DLT replay complete — {} messages resent from {} → {}", replayed, dltTopic, mainTopic);
 
         return replayed;
     }
